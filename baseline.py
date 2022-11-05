@@ -29,6 +29,9 @@ parser.add_argument('--tolerance', default=3, type=int)
 parser.add_argument('--lr_min', default=1e-7, type=float)
 parser.add_argument('--eval_step', default=10000, type=int)
 parser.add_argument('--max_step', default=3200000, type=int)
+parser.add_argument('--train', action='store_true')
+parser.add_argument('--test', action='store_true')
+parser.add_argument('--checkpoint', default=None, type=str)
 args = parser.parse_args()
 
 
@@ -190,11 +193,28 @@ class Trainer:
         with open(os.path.join('figures', 'dev_acc.pkl'), 'wb') as f:
             pickle.dump(dev_accs, f)
 
+    def test(self):
+        if self.args.checkpoint:
+            self.model.load_state_dict(torch.load(args.checkpoint))
+        self.model.eval()
+        test_acc = Accuracy(num_classes=2).to(device)
+        with torch.no_grad():
+            for _, (x_, y_) in enumerate(self.test_dataloader):
+                output = self.model(**x_).logits[:, 0, :]
+                test_acc(output.argmax(dim=1), y_)
+        dev_acc = float(test_acc.compute())
+        print('Test accuracy: %.4f', dev_acc)
+
 
 if __name__ == '__main__':
+
     trainer = Trainer(args)
     trainer.seed(1)
     trainer.load_data()
-    tic = time.time()
-    trainer.train()
-    print(f'Training time: {time.time()-tic}s')
+    if args.train:
+        tic = time.time()
+        trainer.train()
+        print(f'Training time: {time.time()-tic}s')
+    if args.test:
+        trainer.test()
+
