@@ -23,7 +23,7 @@ parser.add_argument('--cache_dir', default='/projects/cache', type=str)
 parser.add_argument('--train_batch_size', default=8, type=int)
 parser.add_argument('--eval_batch_size', default=32, type=int)
 parser.add_argument('--learning_rate', default=1e-5, type=float)
-parser.add_argument('--weight_decay', default=1e-3, type=float)
+parser.add_argument('--weight_decay', default=1e-2, type=float)
 parser.add_argument('--lr_shrink', default=0.5, type=float)
 parser.add_argument('--tolerance', default=3, type=int)
 parser.add_argument('--lr_min', default=1e-7, type=float)
@@ -58,7 +58,9 @@ class Trainer:
         self.tol = args.tolerance
         self.accs = []
         self.lr_shrink = args.lr_shrink
+        self.last_checkpoint = ''
 
+        # tokernizer, model, and optimizer
         self.tokenizer: RobertaTokenizer = AutoTokenizer.from_pretrained(args.model, cache_dir=args.cache_dir)
         self.model: RobertaForSequenceClassification = AutoModelForTokenClassification.from_pretrained(args.model, cache_dir=args.cache_dir).to(device)
         self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
@@ -114,17 +116,25 @@ class Trainer:
         labels = torch.tensor(labels, device=device)
         return inputs, labels
 
-    def shrink_lr(self, acc):
-        if len(self.accs) < self.tol:
-            self.accs.append(acc)
-            return False
-        elif len(self.accs) == self.tol:
+    def shrink_lr(self, acc, cur_step):
+        if cur_step > 0:
+            torch.save(self.model.state_dict(), os.path.join(self.args.save_dir, f'{self.args.model}_{cur_step}.pth'))
+
+        if len(self.accs) <= self.tol:
             self.accs.append(acc)
         else:
             self.accs = self.accs[1:] + [acc]
-        for i in range(1, self.tol + 1):
-            if self.accs[i] > self.accs[i - 1]:
+
+        if len(self.accs) > 1 and self.accs[-1] < self.accs[-2] * 0.9:
+            self.model.load_state_dict(torch.load(self.last_checkpoint))
+        else:
+            self.last_checkpoint = os.path.join(self.args.save_dir, f'{self.args.model}_{cur_step}.pth')
+            if len(self.accs) <= self.tol:
                 return False
+            for i in range(1, self.tol + 1):
+                if self.accs[i] > self.accs[i - 1]:
+                    return False
+
         self.accs.clear()
         self.optimizer.param_groups[0]['lr'] *= self.lr_shrink
         return True
@@ -176,9 +186,8 @@ class Trainer:
                     dev_acc = float(dev_acc.compute())
                     dev_accs.append(dev_acc)
                     print('Dev accuracy: %.4f', dev_acc)
-                    if cur_step > 0:
-                        torch.save(self.model.state_dict(), os.path.join(self.args.save_dir, f'{self.args.model}_{cur_step}'))
-                    if self.shrink_lr(dev_acc):
+
+                    if self.shrink_lr(dev_acc, cur_step):
                         print(f'Shrinking lr to {self.optimizer.param_groups[0]["lr"]}')
                         if self.optimizer.param_groups[0]["lr"] < self.args.lr_min:
                             cur_step = self.args.max_step
