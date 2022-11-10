@@ -17,18 +17,19 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 parser = argparse.ArgumentParser()
 parser.add_argument('--train_file', default='data/training.1600000.processed.noemoticon.csv', type=str)
 parser.add_argument('--test_file', default='data/testdata.manual.2009.06.14.csv', type=str)
+parser.add_argument('--dev_size', default=100000, type=int)
 parser.add_argument('--save_dir', default='models', type=str)
 parser.add_argument('--model', default='roberta-large', type=str)
 parser.add_argument('--cache_dir', default='/projects/cache', type=str)
 parser.add_argument('--train_batch_size', default=8, type=int)
 parser.add_argument('--eval_batch_size', default=32, type=int)
-parser.add_argument('--learning_rate', default=1e-5, type=float)
+parser.add_argument('--learning_rate', default=5e-6, type=float)
 parser.add_argument('--weight_decay', default=1e-2, type=float)
-parser.add_argument('--lr_shrink', default=0.5, type=float)
+parser.add_argument('--lr_shrink', default=1, type=float)
 parser.add_argument('--tolerance', default=3, type=int)
 parser.add_argument('--lr_min', default=1e-7, type=float)
 parser.add_argument('--eval_step', default=10000, type=int)
-parser.add_argument('--max_step', default=3200000, type=int)
+parser.add_argument('--max_step', default=1500000, type=int)
 parser.add_argument('--train', action='store_true')
 parser.add_argument('--test', action='store_true')
 parser.add_argument('--checkpoint', default=None, type=str)
@@ -83,9 +84,9 @@ class Trainer:
             inputs = df[5].to_numpy()
             p = np.random.permutation(labels.shape[0])
             labels, inputs = labels[p], inputs[p]
-            div = round(labels.shape[0] * 0.99)
-            train_labels, dev_labels = labels[:div], labels[div:]
-            train_inputs, dev_inputs = inputs[:div], inputs[div:]
+            div = self.args.dev_size
+            train_labels, dev_labels = labels[div:], labels[:div]
+            train_inputs, dev_inputs = inputs[div:], inputs[:div]
             print(
                 f'Loaded training and development set, number of samples: {train_labels.shape[0]}, {dev_labels.shape[0]}')
             return train_inputs, train_labels, dev_inputs, dev_labels
@@ -179,13 +180,16 @@ class Trainer:
                     del x
                     self.model.eval()
                     dev_acc = Accuracy(num_classes=2).to(device)
+                    dev_loss = 0
                     with torch.no_grad():
-                        for _, (x_, y_) in enumerate(self.dev_dataloader):
+                        for i, (x_, y_) in enumerate(self.dev_dataloader):
                             output = self.model(**x_).logits[:, 0, :]
+                            dev_loss += float(self.criterion(output, y_))
                             dev_acc(output.argmax(dim=1), y_)
+                    dev_loss /= (self.num_dev_samples/self.args.eval_batch_size)
                     dev_acc = float(dev_acc.compute())
                     dev_accs.append(dev_acc)
-                    print('Dev accuracy: %.4f', dev_acc)
+                    print('Dev loss: %.4f, accuracy: %.4f' % (dev_loss, dev_acc))
 
                     if self.shrink_lr(dev_acc, cur_step):
                         print(f'Shrinking lr to {self.optimizer.param_groups[0]["lr"]}')
@@ -196,9 +200,10 @@ class Trainer:
 
                 cur_step += y.shape[0]
                 if cur_step % 50 == 0:
-                    print(f'epoch: {epoch}, total step: {cur_step}, loss: %.4f', float(loss))
+                    print(f'epoch: {epoch}, total step: {cur_step}, loss: %.4f' % float(loss))
                 if cur_step >= self.args.max_step: break
 
+        torch.save(self.model.state_dict(), os.path.join(self.args.save_dir, f'{self.args.model}_{cur_step}.pth'))
         with open(os.path.join('figures', 'dev_acc.pkl'), 'wb') as f:
             pickle.dump(dev_accs, f)
 
@@ -212,7 +217,7 @@ class Trainer:
                 output = self.model(**x_).logits[:, 0, :]
                 test_acc(output.argmax(dim=1), y_)
         dev_acc = float(test_acc.compute())
-        print('Test accuracy: %.4f', dev_acc)
+        print('Test accuracy: %.4f' % dev_acc)
 
 
 if __name__ == '__main__':
