@@ -46,9 +46,11 @@ class Trainer:
         self.train_x, self.train_y = self._load_data(self.args.train_file)
         self.test_x, self.test_y = self._load_data(self.args.test_file, 'test')
 
-    def embed(self):
+    def embed(self, pos=True):
         model: RobertaForSequenceClassification = AutoModelForTokenClassification.from_pretrained('roberta-large', cache_dir='/projects/cache')
         model = model.roberta.embeddings
+        if not pos:
+            model.position_embeddings.weight.data = torch.zeros((514, 1024))
         model.eval()
         embeddings = []
         for i, sentence in enumerate(self.train_x):
@@ -132,7 +134,7 @@ class Trainer:
 
 if __name__ == '__main__':
     trainer = Trainer(args)
-    # trainer.load_data()
-    # trainer.embed()
+    trainer.load_data()
+    trainer.embed(pos=False)
     # trainer.svm_cv()
     trainer.svm(C=0.01)
