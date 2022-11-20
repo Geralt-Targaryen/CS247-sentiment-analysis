@@ -58,10 +58,7 @@ def main(args):
 
     # Obtain the initial trigger tokens and label mapping
     if args.initial_trigger:
-        trigger_ids = tokenizer.encode(
-            args.initial_trigger,
-            add_special_tokens=False
-        ) 
+        trigger_ids = tokenizer.encode(args.initial_trigger, add_special_tokens=False) 
         assert len(trigger_ids) == templatizer.num_trigger_tokens
     else:
         trigger_ids = [tokenizer.mask_token_id] * templatizer.num_trigger_tokens
@@ -119,11 +116,11 @@ if __name__ == '__main__':
     parser.add_argument('--label-map', type=str, default='{"0": 0, "1": 1}', help='JSON object defining label map')
     parser.add_argument('--initial-trigger', type=str, default='This comment is', help='Manual prompt')
     parser.add_argument('--label-field', type=str, default='label', help='Name of the label field')
-    parser.add_argument('--lr', type=float, default=3e-4, help='Learning rate')
+    parser.add_argument('--lr', type=float, default=1e-4, help='Learning rate')
     parser.add_argument('--k', type=int, default=10, help='Number of label tokens to print')
     parser.add_argument('--bsz', type=int, default=32, help='Batch size')
     parser.add_argument('--eval_step', default=32768, type=int)
-    parser.add_argument('--max_step', default=400000, type=int)
+    parser.add_argument('--max_step', default=1000000, type=int)
     parser.add_argument('--model-name', type=str, default='roberta-large')
     parser.add_argument('--cache_dir', type=str, default='/projects/cache')
     parser.add_argument('--seed', type=int, default=0)
