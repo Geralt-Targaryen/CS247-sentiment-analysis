@@ -1,6 +1,17 @@
 # CS247-sentiment-analysis
 
-## Fine-tune roberta
+## SVM
+SVM using CBOW as input feature:
+```
+python svm_w2v.py
+```
+SVM using RoBERTa embedding as input feature:
+```
+python svm_roberta.py --clean --enable_pos_embed \
+    --cache_dir [cache_dir_for 🤗]
+```
+
+## Fine-tune RoBERTa
 Train (with default hyper-parameters)
 ```
 python -u baseline.py --train \
@@ -18,7 +29,14 @@ python baseline.py --test \
     --checkpoint [saved_checkpoint]
 ```
 
-## Prompt-tune roberta
+## Prompt-tune RoBERTa
+See ```prompt_roberta.ipynb```. 
+
+In ```finetune_roberta.ipynb``` there is a corresponding version for fine-tuning using 1k data.
+
+In ```prompt_bert.ipynb``` we also provide the code for prompt-tuning BERT (a bit different from RoBERTa).
+
+## AUTOPROMPT
 #### Search for labels (with default hyper-parameters)
 ```
 python -u label_search.py 
